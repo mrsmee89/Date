@@ -27,11 +27,49 @@ var parseDate = (function(){
 		SUBTRACT: 's'
 	}
 	var methods = {
+		utils: {
+			isString: function(s){
+				return s && typeof s === 'string';
+			},
+			inArray: function(haystack, needle){
+				if(!haystack || !haystack.length || typeof needle == "undefined") {
+					return -1;
+				}
+				if(typeof Array.prototype.indexOf !== 'undefined') {
+					return haystack.indexOf(needle);
+				}
+				for (var i = 0; i < haystack.length; i++) {
+					if(haystack[i] == needle) {
+						return i;
+					}
+				};
+				return -1;
+			},
+			inObject: function(obj, needle){
+				if(!obj || typeof needle == "undefined") {
+					return -1;
+				}
+				var iter = 0;
+				for (var prop in obj) {
+					if (obj.hasOwnProperty(prop) && typeof needle != 'undefined' && needle.toLowerCase() == obj[prop].toLowerCase()) {
+						return iter;
+					}
+					iter ++;
+				}
+				return -1;
+			}
+		},
 		getDayNameFromNum: function(num){
 			return props.dayMap[num + 1];
 		},
 		getMonthNameFromNum: function(num){
 			return props.monthMap[num + 1];
+		},
+		getMonthNumFromName: function(monthName){
+			if(!monthName) {
+				return -1;
+			}
+			return methods.utils.getKeyFromValue(monthName) - 1;
 		},
 		getDayOfMonthPlusSuffix: function(dayOfMonth){
 			var sfx = "";
@@ -46,33 +84,8 @@ var parseDate = (function(){
 			}
 			return dayOfMonth + sfx;
 		},
-		inArray: function(haystack, needle){
-			if(!haystack || !haystack.length || typeof needle == "undefined") {
-				return -1;
-			}
-			if(typeof Array.prototype.indexOf !== 'undefined') {
-				return haystack.indexOf(needle);
-			}
-			for (var i = 0; i < haystack.length; i++) {
-				if(haystack[i] == needle) {
-					return i;
-				}
-			};
-			return -1;
-		},
-		inObject: function(obj, needle){
-			if(!obj || typeof needle == "undefined") {
-				return false;
-			}
-			for (var prop in obj) {
-				if (obj.hasOwnProperty(prop) && needle == obj[prop]) {
-					return true;
-				}
-			}
-			return false;
-		},
 		addOrSubtractDate: function(dateObj, amount, type, addOrSubtract){
-			var amount = amount || 0; // prevent invalid date being return if amount is undefined
+			var amount = amount || 0; // prevent invalid date being returned if amount is undefined
 			dateObj.setInitialTime();
 			if(type == Date.SECOND) {
 				if(addOrSubtract == props.SUBTRACT) {
@@ -112,9 +125,9 @@ var parseDate = (function(){
 				}
 			}else if(type == Date.YEAR) {
 				if(addOrSubtract == props.SUBTRACT) {
-					return dateObj.setYear(dateObj.getFullYear() - amount);
+					return dateObj.setFullYear(dateObj.getFullYear() - amount);
 				}else {
-					return dateObj.setYear(dateObj.getFullYear() + amount);
+					return dateObj.setFullYear(dateObj.getFullYear() + amount);
 				}
 			}
 			return dateObj;
@@ -124,38 +137,67 @@ var parseDate = (function(){
 		if(typeof str == 'undefined') {
 			return this;
 		}
-		var formatter = str.split(/\s/g),
+		var formatter = str.split(/[\d\sa-zA-Z]/gi),
+			dividerArr = str.match(/[^a-zA-Z\d\s:]/gi),
+			divider = dividerArr && dividerArr.length ? dividerArr[0] : " ",
 			dayPlace,
 			monthPlace,
 			yearPlace,
 			datePlace,
 			dateBuilder = [],
-			parsedDate;
+			parsedDate,
+			named = false;
+			console.log(formatter);
+			if(formatter.length == 1) {
+				formatter = str.split(" ");
+				named = true;
+			}
 		for (var i = 0; i < formatter.length; i++) {
-			parsedDate = parseInt(formatter[i]);
-			if(methods.inObject(props.dayMap, formatter[i]) ) {
+			formatter[i] = formatter[i].toLowerCase();
+			if(formatter[i].charAt(0) == 'd' && formatter[i] != 'date') {
 				dayPlace = i;
 				dateBuilder.push("d");
-			}else if(methods.inObject(props.monthMap, formatter[i])) {
+				if(named) {
+					formatter[i] = methods.getDayNameFromNum(this.getDay());
+				}else {
+					formatter[i] = this.getDay();
+				}
+			}else if(formatter[i].charAt(0) == 'm') {
 				monthPlace = i;
 				dateBuilder.push("m");
-			}else if(parsedDate < 32) {
-				datePlace = i;
-				dateBuilder.push("dt");
-			}else{
+				if(named) {
+					formatter[i] = methods.getMonthNameFromNum(this.getMonth());
+				}else {
+					formatter[i] = this.getMonth();
+				}
+			}else if(formatter[i].charAt(0) == 'y') {
 				yearPlace = i;
 				dateBuilder.push("y");
+				formatter[i] = this.getFullYear();
+			}else if(formatter[i] == 'date') {
+				yearPlace = i;
+				dateBuilder.push("date");
+				if(named) {
+					formatter[i] = methods.getDayOfMonthPlusSuffix(this.getDate());
+				}else {
+					formatter[i] = this.getDate();
+				}
+			}else {
+				// datePlace = i;
+				// dateBuilder.push("dt");
 			}
 		};
+		// console.log(formatter);
+		return formatter.join(divider);
 		this.year = this.getFullYear();
 		this.month = this.getMonth();
 		this.dayOfMonth = this.getDate();
 		this.monthName = methods.getMonthNameFromNum(this.month);
 		this.dayName = methods.getDayNameFromNum(this.getDay());
-		dateBuilder[methods.inArray(dateBuilder, "d")] = this.dayName;
-		dateBuilder[methods.inArray(dateBuilder, "dt")] = methods.getDayOfMonthPlusSuffix(this.dayOfMonth);
-		dateBuilder[methods.inArray(dateBuilder, "m")] = this.monthName;
-		dateBuilder[methods.inArray(dateBuilder, "y")] = this.year;
+		dateBuilder[methods.utils.inArray(dateBuilder, "d")] = this.dayName;
+		dateBuilder[methods.utils.inArray(dateBuilder, "dt")] = methods.getDayOfMonthPlusSuffix(this.dayOfMonth);
+		dateBuilder[methods.utils.inArray(dateBuilder, "m")] = this.monthName;
+		dateBuilder[methods.utils.inArray(dateBuilder, "y")] = this.year;
 		return dateBuilder.join(" ");
 	}
 	Date.YEAR = "y";
@@ -189,13 +231,15 @@ var parseDate = (function(){
 		this.setInitialTime();
 		if(type == Date.DAY) {
 			this.setHours(0,0,0,0);
-			
 		}else if(type == Date.WEEK) {
 			while(this.getDay() != 0 ) {
 				this.setDate(this.getDate()-1);
 			}
 		}else if(type == Date.MONTH) {
 			this.setDate(1);
+		}else if(type == Date.YEAR) {
+			this.setFullYear(this.getFullYear(),0,1);
+			this.setHours(0,0,0,0);
 		}
 		if(autoBeginDay) {
 			this.setHours(0,0,0,0);
@@ -214,6 +258,10 @@ var parseDate = (function(){
 		}else if(type == Date.MONTH) {
 			this.setMonth(this.getMonth() + 1);
 			this.setDate(0);
+		}else if(type == Date.YEAR) {
+			this.setFullYear(this.getFullYear(), 11);
+			this.goToEndOf(Date.MONTH);
+			this.setHours(0,0,0,0);
 		}
 		if(autoBeginDay) {
 			this.setHours(11,59,59,59);
@@ -276,15 +324,58 @@ var parseDate = (function(){
 		this.subtract(amount, Date.YEAR);
 		return this;
 	};
-	Date.prototype.reset = Date.prototype.resetToNow = function(){
+	Date.prototype.reset = Date.prototype.end = function(){
 		this.setTime(this.initialTime || this.getTime());
 		return this;
 	};
 	Date.prototype.next = function(type){
+		var token;
+		if(type == Date.DAY) {
+			this.addDays(1).goToBeginningOf(Date.DAY);
+		}else if(type == Date.WEEK) {
+			this.goToBeginningOf(Date.WEEK, true).addWeeks(1);
+		}else if(type == Date.MONTH) {
+			this.goToBeginningOf(Date.MONTH, true).addMonths(1);
+		}else if(type == Date.YEAR) {
+			this.goToBeginningOf(Date.YEAR, true).plusYears(1);
+		}else if(methods.utils.isString(type) && (token = methods.utils.inObject(props.dayMap, type)) > -1) { 
+			if(this.getDay() == token) {
+				this.nextWeek();
+			}
+			this.goToBeginningOf(Date.DAY);
+			while(this.getDay() != token) {
+				this.setDate(this.getDate() + 1);
+			}
+		}else if(methods.utils.isString(type) && (token = methods.utils.inObject(props.monthMap, type)) > -1) { 
+			if(token <= this.getMonth()) {
+				this.nextYear();
+			}
+			this.goToBeginningOf(Date.MONTH, true).setMonth(token);
+		}
+		return this;
+	}
+	Date.prototype.last = function(type){
 		if(type == Date.DAY) {
 			this.minusDays(1).goToBeginningOf(Date.DAY);
 		}else if(type == Date.WEEK) {
-			this.goToBeginningOf(Date.WEEK, true).addWeeks(1);
+			this.goToBeginningOf(Date.WEEK, true).subtractWeeks(1);
+		}else if(type == Date.MONTH) {
+			this.goToBeginningOf(Date.MONTH, true).subtractMonths(1);
+		}else if(type == Date.YEAR) {
+			this.goToBeginningOf(Date.YEAR, true).minusYears(1);
+		}else if(methods.utils.isString(type) && (token = methods.utils.inObject(props.dayMap, type)) > -1) { 
+			if(this.getDay() == token) {
+				this.lastWeek().goToEndOf(Date.WEEK);
+			}
+			this.goToBeginningOf(Date.DAY);
+			while(this.getDay() != token) {
+				this.setDate(this.getDate() - 1);
+			}
+		}else if(methods.utils.isString(type) && (token = methods.utils.inObject(props.monthMap, type)) > -1) { 
+			if(token >= this.getMonth()) {
+				this.lastYear();
+			}
+			this.goToBeginningOf(Date.MONTH, true).setMonth(token);
 		}
 
 		return this;
@@ -293,27 +384,29 @@ var parseDate = (function(){
 		this.now().goToBeginningOf(Date.DAY);
 		return this;
 	};
-	Date.prototype.tommorow = function(){
-		this.addDays(1).goToBeginningOf(Date.DAY);
-		return this;
-	};
 	Date.prototype.yesterday = function(){
+		return this.last(Date.DAY);
+	};
+	Date.prototype.lastWeek = function(){
+		return this.last(Date.WEEK);
+	};
+	Date.prototype.lastMonth = function(){
+		return this.last(Date.MONTH);
+	};
+	Date.prototype.lastYear = function(){
+		return this.last(Date.YEAR);
+	};
+	Date.prototype.tommorow = function(){
 		return this.next(Date.DAY);
 	};
 	Date.prototype.nextWeek = function(){
 		return this.next(Date.WEEK);
 	};
-	Date.prototype.lastWeek = function(){
-		this.goToBeginningOf(Date.WEEK, true).subtractWeeks(1);
-		return this;
-	};
 	Date.prototype.nextMonth = function(){
-		this.goToBeginningOf(Date.MONTH, true).addMonths(1);
-		return this;
+		return this.next(Date.MONTH);
 	};
-	Date.prototype.lastMonth = function(){
-		this.goToBeginningOf(Date.MONTH, true).subtractMonths(1);
-		return this;
+	Date.prototype.nextYear = function(){
+		return this.next(Date.YEAR);
 	};
 	Date.prototype.day = function(){
 		return methods.getDayNameFromNum(this.getDay());
